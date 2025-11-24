@@ -12,6 +12,7 @@ import com.typewritermc.core.extension.annotations.Help
 import com.typewritermc.core.extension.annotations.Tags
 import com.typewritermc.engine.paper.entry.ManifestEntry
 import com.typewritermc.engine.paper.entry.entries.ArtifactEntry
+import java.util.UUID
 import java.time.Duration
 
 /**
@@ -68,5 +69,5 @@ class DiscordLinkArtifactEntry(
     override val id: String = "",
     override val name: String = "",
     @Help("Unique identifier for persisted link data")
-    override val artifactId: String = "",
+    override val artifactId: String = UUID.randomUUID().toString(),
 ) : ArtifactEntry

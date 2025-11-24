@@ -1,5 +1,6 @@
 package com.borntocraft.typewriter.community.discord.service
 
+import com.borntocraft.typewriter.community.discord.data.DiscordLinkStorage
 import com.borntocraft.typewriter.community.discord.data.LinkRecord
 import com.borntocraft.typewriter.community.discord.data.PendingLink
 import com.borntocraft.typewriter.community.discord.entries.DiscordLinkArtifactEntry
@@ -76,7 +77,10 @@ class DiscordLinkRepository(private val storage: DiscordLinkArtifactEntry?) {
     private fun persist() {
         val entry = storage ?: return
         runCatching {
-            val data = LinkStorage(links.values.toList())
+            val data = DiscordLinkStorage(
+                links = links.values.toMutableList(),
+                pending = pendingLinks.values.toMutableList(),
+            )
             val json = gson.toJson(data)
             runBlocking { entry.stringData(json) }
         }
@@ -87,13 +91,10 @@ class DiscordLinkRepository(private val storage: DiscordLinkArtifactEntry?) {
         runCatching {
             val raw = runBlocking { entry.stringData() } ?: return
             if (raw.isBlank()) return
-            val type: Type = object : TypeToken<LinkStorage>() {}.type
-            val data: LinkStorage = gson.fromJson(raw, type) ?: return
+            val type: Type = object : TypeToken<DiscordLinkStorage>() {}.type
+            val data: DiscordLinkStorage = gson.fromJson(raw, type) ?: return
             data.links.forEach { links[it.playerUuid] = it }
+            data.pending.forEach { pendingLinks[it.code.lowercase()] = it }
         }
     }
-
-    private data class LinkStorage(
-        val links: List<LinkRecord> = emptyList(),
-    )
 }

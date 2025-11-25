@@ -80,4 +80,12 @@ class DiscordClientService {
     }
 
     fun isReady(): Boolean = jda?.status == JDA.Status.CONNECTED
+
+    fun addEventListener(listener: Any) {
+        jda?.addEventListener(listener)
+    }
+
+    fun removeEventListener(listener: Any) {
+        jda?.removeEventListener(listener)
+    }
 }

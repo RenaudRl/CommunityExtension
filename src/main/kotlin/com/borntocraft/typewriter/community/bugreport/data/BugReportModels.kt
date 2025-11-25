@@ -62,6 +62,8 @@ data class BugReportCategory(
     val dialogTitle: String = "New Bug Report",
     @Help("Custom inputs for this category (TextInput or BooleanInput only)")
     val inputs: List<BugReportInput> = emptyList(),
+    @Help("Line number where this category appears in the selection menu (0-indexed)")
+    val displayLine: Int = 0,
 )
 
 sealed interface BugReportInput {

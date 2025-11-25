@@ -21,12 +21,18 @@ import java.time.Duration
 class BugReportManifestEntry(
     override val id: String = "",
     override val name: String = "",
+    @Help("Command name to open this bug report system (e.g., 'report', 'bugreport', 'ticket')")
+    val commandName: String = "",
     @Help("Name displayed when referencing this server in reports")
     val serverName: String = "BornToCraft",
     @Help("Artifact storing the incremental sequence for bug IDs")
     val sequenceStorage: Ref<BugReportSequenceArtifactEntry> = emptyRef(),
     @Help("Title displayed on the category selection dialog")
     val selectMenuTitle: String = "Select Category",
+    @Help("Text displayed on the submit button")
+    val submitButtonText: String = "Submit",
+    @Help("Number of lines to display categories across in the selection menu")
+    val categoryLayoutLines: Int = 1,
     @Help("Maximum amount of non-deleted reports each player may keep (0 = unlimited)")
     val maxReportsPerPlayer: Int = 0,
     @Help("Cooldown in seconds between two submissions from the same player")

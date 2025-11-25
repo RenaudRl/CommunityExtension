@@ -6,6 +6,10 @@ import com.borntocraft.typewriter.community.bugreport.entries.BugReportManifestE
 import com.borntocraft.typewriter.community.bugreport.service.BugReportDialogService
 import com.borntocraft.typewriter.community.bugreport.service.BugReportRepository
 import com.borntocraft.typewriter.community.bugreport.service.BugReportWebhookService
+import com.borntocraft.typewriter.community.chat.entries.ChatSyncManifestEntry
+import com.borntocraft.typewriter.community.chat.service.ChatSyncService
+import com.borntocraft.typewriter.community.console.entries.ConsoleChannelEntry
+import com.borntocraft.typewriter.community.console.service.ConsoleService
 import com.borntocraft.typewriter.community.discord.data.DiscordLinkMessages
 import com.borntocraft.typewriter.community.discord.data.asReadable
 import com.borntocraft.typewriter.community.discord.entries.DiscordLinkArtifactEntry
@@ -22,39 +26,37 @@ import com.typewritermc.engine.paper.logger
 import net.dv8tion.jda.api.entities.emoji.Emoji
 import org.bukkit.Bukkit
 import org.bukkit.event.EventHandler
+import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
+
 
 /**
  * Main entry point for the Community Extension.
  * Initializes shared services for Discord Linking and Bug Reporting.
  */
 @Singleton
-object CommunityExtension : Initializable {
+class CommunityExtension : Initializable {
 
-    lateinit var bugReportRepository: BugReportRepository
-    lateinit var discordLinkRepository: DiscordLinkRepository
-    lateinit var discordLinkService: DiscordLinkService
     private val webhookSender = WebhookSender()
     private val bugReportWebhookService = BugReportWebhookService(webhookSender)
     val discordClientService = DiscordClientService()
+    
+    private lateinit var bugReportRepository: BugReportRepository
+    private lateinit var discordLinkRepository: DiscordLinkRepository
+    private lateinit var discordLinkService: DiscordLinkService
+    private var eventListener: Listener? = null
+    private val chatSyncServices = mutableListOf<ChatSyncService>()
+    private val consoleServices = mutableListOf<ConsoleService>()
 
     override suspend fun initialize() {
-        // Defensive disconnect in case of hot-reload to avoid duplicated JDA sessions
+        // Clean up previous state
+        shutdown()
+        
         discordClientService.disconnect()
 
-        val bugManifest = Query.firstWhere<BugReportManifestEntry> { true }
+        val bugManifests = Query.find<BugReportManifestEntry>()
         val linkManifest = Query.firstWhere<DiscordLinkManifestEntry> { true }
-
-        bugReportRepository = BugReportRepository(bugManifest?.sequenceStorage?.get())
-        BugReportDialogService.repository = bugReportRepository
-        BugReportDialogService.categories = bugManifest?.categories ?: emptyList()
-        BugReportDialogService.defaultStatusId = "open"
-        BugReportDialogService.serverName = bugManifest?.serverName ?: "Server"
-        BugReportDialogService.selectMenuTitle = bugManifest?.selectMenuTitle ?: "Select Category"
-        BugReportDialogService.messages = bugManifest?.messages ?: BugReportMessages()
-        BugReportDialogService.webhookSettings = bugManifest?.webhook
-        BugReportDialogService.webhookService = bugReportWebhookService
 
         if (linkManifest != null) {
             val linkStorage = linkManifest.storage?.get()
@@ -76,7 +78,7 @@ object CommunityExtension : Initializable {
                     if (content.length != expectedLength || !content.all { it.isLetterOrDigit() }) {
                         return@onMessageInChannel
                     }
-                    val accepted = discordLinkService.verifyCode(content, event.author.id, event.author.asTag)
+                    val accepted = discordLinkService.verifyCode(content, event.author.id, event.author.getAsTag())
                     val emoji = if (accepted) "✅" else "❌"
                     event.message.addReaction(Emoji.fromUnicode(emoji)).queue()
                     if (accepted) {
@@ -108,6 +110,9 @@ object CommunityExtension : Initializable {
             logger.warning("discord_link_manifest not found; Discord link is disabled.")
         }
 
+        // Unregister old commands before registering new ones
+        CommandRegistry.unregisterAll()
+
         CommandRegistry.register("DiscordLink") { sender, _ ->
             if (sender is org.bukkit.entity.Player) {
                 val code = discordLinkService.generateCode(sender)
@@ -124,26 +129,113 @@ object CommunityExtension : Initializable {
             }
         }
 
-        CommandRegistry.register("Report") { sender, _ ->
-            if (sender is org.bukkit.entity.Player) {
-                BugReportDialogService.openCategorySelection(sender)
+        // Register bug report commands for each manifest
+        bugManifests.forEach { manifest ->
+            if (manifest.commandName.isBlank()) {
+                logger.warning("Bug report manifest '${manifest.name}' has no command name, skipping")
+                return@forEach
             }
+            
+            CommandRegistry.register(manifest.commandName) { sender, _ ->
+                if (sender is org.bukkit.entity.Player) {
+                    openBugReportDialog(sender, manifest)
+                }
+            }
+            logger.info("Registered bug report command: /${manifest.commandName} for manifest '${manifest.name}'")
         }
 
-        Bukkit.getPluginManager().registerEvents(object : Listener {
+        // Initialize chat sync services
+        val chatManifests = Query.find<ChatSyncManifestEntry>()
+        chatManifests.forEach { manifest ->
+            if (!manifest.enabled) {
+                logger.info("Chat sync manifest '${manifest.name}' is disabled, skipping")
+                return@forEach
+            }
+            
+            val chatService = ChatSyncService(manifest, webhookSender)
+            chatSyncServices.add(chatService)
+            Bukkit.getPluginManager().registerEvents(chatService, org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(this::class.java))
+            logger.info("Initialized chat sync for manifest '${manifest.name}'")
+        }
+
+        // Initialize console services
+        val consoleManifests = Query.find<ConsoleChannelEntry>()
+        consoleManifests.forEach { manifest ->
+            if (!manifest.enabled) {
+                logger.info("Console channel '${manifest.name}' is disabled, skipping")
+                return@forEach
+            }
+            
+            val consoleService = ConsoleService(manifest)
+            consoleServices.add(consoleService)
+            discordClientService.addEventListener(consoleService)
+            logger.info("Initialized console channel for manifest '${manifest.name}'")
+        }
+
+        // Unregister old listener if exists
+        eventListener?.let { HandlerList.unregisterAll(it) }
+        
+        // Register new listener
+        val listener = object : Listener {
             @EventHandler
             fun onJoin(event: PlayerJoinEvent) {
                 if (discordClientService.isReady()) {
                     discordLinkService.syncRoles(event.player)
                 }
             }
-        }, org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(this::class.java))
+        }
+        eventListener = listener
+        Bukkit.getPluginManager().registerEvents(listener, org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(this::class.java))
 
         logger.info("CommunityExtension initialized")
     }
 
+    private fun openBugReportDialog(player: org.bukkit.entity.Player, manifest: BugReportManifestEntry) {
+        // Create isolated repository for this manifest
+        val repository = BugReportRepository(manifest.sequenceStorage?.get())
+        
+        // Configure dialog service with manifest-specific settings
+        BugReportDialogService.repository = repository
+        BugReportDialogService.categories = manifest.categories
+        BugReportDialogService.defaultStatusId = "open"
+        BugReportDialogService.serverName = manifest.serverName
+        BugReportDialogService.selectMenuTitle = manifest.selectMenuTitle
+        BugReportDialogService.submitButtonText = manifest.submitButtonText
+        BugReportDialogService.categoryLayoutLines = manifest.categoryLayoutLines
+        BugReportDialogService.messages = manifest.messages
+        BugReportDialogService.webhookSettings = manifest.webhook
+        BugReportDialogService.webhookService = bugReportWebhookService
+        
+        // Open the dialog
+        BugReportDialogService.openCategorySelection(player)
+    }
+
     override suspend fun shutdown() {
+        // Unregister commands
+        CommandRegistry.unregisterAll()
+        
+        // Unregister event listeners
+        eventListener?.let { HandlerList.unregisterAll(it) }
+        eventListener = null
+        
+        // Unregister chat sync services
+        chatSyncServices.forEach { service ->
+            HandlerList.unregisterAll(service)
+        }
+        chatSyncServices.clear()
+        
+        // Unregister console services
+        consoleServices.forEach { service ->
+            discordClientService.removeEventListener(service)
+        }
+        consoleServices.clear()
+        
+        // Disconnect Discord client
         discordClientService.disconnect()
+        
+        // Reset dialog service state
+        BugReportDialogService.reset()
+        
         logger.info("CommunityExtension stopped")
     }
 

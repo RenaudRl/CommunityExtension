@@ -27,9 +27,23 @@ object BugReportDialogService {
     var defaultStatusId: String = "open"
     var serverName: String = "BornToCraft"
     var selectMenuTitle: String = "Select Category"
+    var submitButtonText: String = "Submit"
+    var categoryLayoutLines: Int = 1
     var messages: BugReportMessages = BugReportMessages()
     var webhookSettings: BugReportWebhookSettings? = null
     var webhookService: BugReportWebhookService? = null
+
+    fun reset() {
+        categories = defaultCategories
+        defaultStatusId = "open"
+        serverName = "BornToCraft"
+        selectMenuTitle = "Select Category"
+        submitButtonText = "Submit"
+        categoryLayoutLines = 1
+        messages = BugReportMessages()
+        webhookSettings = null
+        webhookService = null
+    }
 
     fun openCategorySelection(player: Player) = openCategorySelection(player, categories)
 
@@ -58,23 +72,46 @@ object BugReportDialogService {
             return
         }
 
-        val buttons = availableCategories.map { category ->
-            ActionButton.builder(Component.text(category.displayName))
-                .action(
-                    io.papermc.paper.registry.data.dialog.action.DialogAction.customClick(
-                        { _, _ -> openReportForm(player, category) },
-                        net.kyori.adventure.text.event.ClickCallback.Options.builder().build(),
-                    ),
-                )
-                .build()
-        }
+        // Group categories by display line
+        val categoriesByLine = availableCategories.groupBy { it.displayLine }
+        val maxLine = categoriesByLine.keys.maxOrNull() ?: 0
+        val effectiveLines = (maxLine + 1).coerceAtLeast(categoryLayoutLines)
 
-        val dialog = Dialog.create { factory ->
-            factory.empty()
-                .base(DialogBase.builder(Component.text(selectMenuTitle))
-                    .body(listOf(DialogBody.plainMessage(Component.text("Choose a category for your report:"))))
-                    .build())
-                .type(DialogType.multiAction(buttons, null, 1))
+        // Create button rows for each line
+        val buttonRows = (0 until effectiveLines).map { lineIndex ->
+            categoriesByLine[lineIndex]?.map { category ->
+                ActionButton.builder(Component.text(category.displayName))
+                    .action(
+                        io.papermc.paper.registry.data.dialog.action.DialogAction.customClick(
+                            { _, _ -> openReportForm(player, category) },
+                            net.kyori.adventure.text.event.ClickCallback.Options.builder().build(),
+                        ),
+                    )
+                    .build()
+            } ?: emptyList()
+        }.filter { it.isNotEmpty() }
+
+        // Create dialog with multi-line layout
+        val dialog = if (buttonRows.size == 1) {
+            // Single line - use simple multiAction
+            Dialog.create { factory ->
+                factory.empty()
+                    .base(DialogBase.builder(Component.text(selectMenuTitle))
+                        .body(listOf(DialogBody.plainMessage(Component.text("Choose a category for your report:"))))
+                        .build())
+                    .type(DialogType.multiAction(buttonRows[0], null, 1))
+            }
+        } else {
+            // Multiple lines - flatten all buttons into a single list for now
+            // TODO: Paper Dialog API may not support true multi-line layouts yet
+            val allButtons = buttonRows.flatten()
+            Dialog.create { factory ->
+                factory.empty()
+                    .base(DialogBase.builder(Component.text(selectMenuTitle))
+                        .body(listOf(DialogBody.plainMessage(Component.text("Choose a category for your report:"))))
+                        .build())
+                    .type(DialogType.multiAction(allButtons, null, buttonRows.size))
+            }
         }
 
         player.showDialog(dialog)
@@ -110,7 +147,7 @@ object BugReportDialogService {
             }
         }
 
-        val submitAction = ActionButton.builder(Component.text("Submit"))
+        val submitAction = ActionButton.builder(Component.text(submitButtonText))
             .action(io.papermc.paper.registry.data.dialog.action.DialogAction.customClick({ result, _ ->
                 val customFields = mutableMapOf<String, String>()
 

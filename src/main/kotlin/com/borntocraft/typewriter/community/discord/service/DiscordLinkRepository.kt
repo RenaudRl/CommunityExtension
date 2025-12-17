@@ -89,12 +89,43 @@ class DiscordLinkRepository(private val storage: DiscordLinkArtifactEntry?) {
     private fun load() {
         val entry = storage ?: return
         runCatching {
-            val raw = runBlocking { entry.stringData() } ?: return
-            if (raw.isBlank()) return
+            val raw = runBlocking { entry.stringData() }
+            // If artifact doesn't exist or is empty, initialize with empty storage
+            if (raw.isNullOrBlank()) {
+                initializeEmptyStorage()
+                return
+            }
             val type: Type = object : TypeToken<DiscordLinkStorage>() {}.type
             val data: DiscordLinkStorage = gson.fromJson(raw, type) ?: return
             data.links.forEach { links[it.playerUuid] = it }
             data.pending.forEach { pendingLinks[it.code.lowercase()] = it }
+        }.onFailure {
+            // Artifact file not found or corrupted - initialize with empty storage
+            initializeEmptyStorage()
+        }
+    }
+
+    /**
+     * Ensures the artifact storage file exists by creating it with empty data if needed.
+     */
+    fun ensureInitialized() {
+        val entry = storage ?: return
+        runCatching {
+            val raw = runBlocking { entry.stringData() }
+            if (raw.isNullOrBlank()) {
+                initializeEmptyStorage()
+            }
+        }.onFailure {
+            initializeEmptyStorage()
+        }
+    }
+
+    private fun initializeEmptyStorage() {
+        val entry = storage ?: return
+        runCatching {
+            val data = DiscordLinkStorage()
+            val json = gson.toJson(data)
+            runBlocking { entry.stringData(json) }
         }
     }
 }

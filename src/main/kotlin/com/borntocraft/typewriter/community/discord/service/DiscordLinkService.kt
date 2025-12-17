@@ -92,6 +92,60 @@ class DiscordLinkService(
         repository.removeLink(playerUuid)
     }
 
+    /**
+     * Unlinks a player from Discord, removing their mapped roles and deleting the link record.
+     * @return true if successfully unlinked, false if no link existed
+     */
+    fun unlinkPlayer(player: org.bukkit.entity.Player): Boolean {
+        val link = repository.findLink(player.uniqueId) ?: return false
+        
+        // Remove all mapped roles from Discord
+        val guild = discordClient.getGuild()
+        if (guild != null) {
+            guild.retrieveMemberById(link.discordId).queue({ member ->
+                val mappedRoles = manifest.roleMappings.mapNotNull { guild.getRoleById(it.discordRoleId) }
+                val rolesToRemove = mappedRoles.filter { member.roles.contains(it) }
+                if (rolesToRemove.isNotEmpty()) {
+                    guild.modifyMemberRoles(member, emptyList(), rolesToRemove).queue({
+                        logger.info("Removed Discord roles for ${player.name}: ${rolesToRemove.map { it.name }}")
+                    }, { error ->
+                        logger.warning("Failed to remove Discord roles for ${player.name}: ${error.message}")
+                    })
+                }
+            }, { error ->
+                logger.warning("Failed to retrieve Discord member for ${player.name} (${link.discordId}): ${error.message}")
+            })
+        }
+        
+        // Remove the link from storage
+        repository.removeLink(player.uniqueId)
+        
+        // Notify webhook
+        notifyWebhookUnlinked(link)
+        
+        return true
+    }
+
+    private fun notifyWebhookUnlinked(link: LinkRecord) {
+        val settings = manifest.webhook
+        if (!settings.enabled || settings.url.isBlank()) return
+
+        val content = manifest.messages.linkRevoked
+            .replace("{discord}", link.discordUsername)
+            .replace("{player}", link.playerName)
+
+        val embed = WebhookEmbed(
+            title = "Discord account unlinked",
+            description = content,
+            fields = listOf(
+                WebhookEmbedField("Player", link.playerName, true),
+                WebhookEmbedField("Discord", link.discordUsername, true),
+                WebhookEmbedField("Unlinked at", Instant.now().toString(), false),
+            ),
+        )
+        webhookSender.send(settings, content, listOf(embed))
+    }
+
     fun isLinked(playerUuid: UUID): Boolean = repository.findLink(playerUuid) != null
 
     fun syncRoles(player: Player) {

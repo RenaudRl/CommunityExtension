@@ -36,8 +36,10 @@ import org.bukkit.event.player.PlayerJoinEvent
  * Initializes shared services for Discord Linking and Bug Reporting.
  */
 @Singleton
-class CommunityExtension : Initializable {
+object CommunityExtension : Initializable {
 
+    private val plugin = Bukkit.getPluginManager().getPlugin("TypeWriter")
+        ?: error("TypeWriter plugin is required")
     private val webhookSender = WebhookSender()
     private val bugReportWebhookService = BugReportWebhookService(webhookSender)
     val discordClientService = DiscordClientService()
@@ -61,6 +63,8 @@ class CommunityExtension : Initializable {
         if (linkManifest != null) {
             val linkStorage = linkManifest.storage?.get()
             discordLinkRepository = DiscordLinkRepository(linkStorage)
+            // Ensure the artifact storage file exists
+            discordLinkRepository.ensureInitialized()
             discordLinkService = DiscordLinkService(
                 discordLinkRepository,
                 linkManifest,
@@ -129,6 +133,18 @@ class CommunityExtension : Initializable {
             }
         }
 
+        CommandRegistry.register("DiscordUnlink") { sender, _ ->
+            if (sender is org.bukkit.entity.Player) {
+                val messages: DiscordLinkMessages = linkManifest?.messages ?: DiscordLinkMessages()
+                val success = discordLinkService.unlinkPlayer(sender)
+                if (success) {
+                    sender.sendMessage(net.kyori.adventure.text.Component.text(messages.unlinkSuccess))
+                } else {
+                    sender.sendMessage(net.kyori.adventure.text.Component.text(messages.unlinkNoLink))
+                }
+            }
+        }
+
         // Register bug report commands for each manifest
         bugManifests.forEach { manifest ->
             if (manifest.commandName.isBlank()) {
@@ -154,7 +170,7 @@ class CommunityExtension : Initializable {
             
             val chatService = ChatSyncService(manifest, webhookSender)
             chatSyncServices.add(chatService)
-            Bukkit.getPluginManager().registerEvents(chatService, org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(this::class.java))
+            Bukkit.getPluginManager().registerEvents(chatService, plugin)
             logger.info("Initialized chat sync for manifest '${manifest.name}'")
         }
 
@@ -185,7 +201,7 @@ class CommunityExtension : Initializable {
             }
         }
         eventListener = listener
-        Bukkit.getPluginManager().registerEvents(listener, org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(this::class.java))
+        Bukkit.getPluginManager().registerEvents(listener, plugin)
 
         logger.info("CommunityExtension initialized")
     }

@@ -54,6 +54,8 @@ data class DiscordLinkMessages(
     val pendingExists: String = "You already have a pending code: {code} (expires in {duration}).",
     val menuPendingCode: String = "Pending Discord verification code: {code} (expires in {duration}).",
     val menuNoPendingCode: String = "You do not have a pending Discord verification code.",
+    val unlinkSuccess: String = "Your Discord account has been unlinked successfully.",
+    val unlinkNoLink: String = "You don't have a Discord account linked.",
 )
 
 /**

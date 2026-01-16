@@ -82,7 +82,7 @@ object CommunityExtension : Initializable {
                     if (content.length != expectedLength || !content.all { it.isLetterOrDigit() }) {
                         return@onMessageInChannel
                     }
-                    val accepted = discordLinkService.verifyCode(content, event.author.id, event.author.getAsTag())
+                    val accepted = discordLinkService.verifyCode(content, event.author.id, event.author.name)
                     val emoji = if (accepted) "✅" else "❌"
                     event.message.addReaction(Emoji.fromUnicode(emoji)).queue()
                     if (accepted) {

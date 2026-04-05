@@ -1,19 +1,23 @@
+﻿plugins {
+    kotlin("jvm") version "2.2.10"
+    id("com.typewritermc.module-plugin") version "2.1.0"
+}
+
 repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
+    flatDir {
+        dir("libs")
+    }
 }
 
 dependencies {
     testImplementation(kotlin("test"))
-    testImplementation("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     implementation("net.dv8tion:JDA:5.0.0-beta.24") // Use a recent version
-
 }
 
-plugins {
-    kotlin("jvm") version "2.2.10"
-    id("com.typewritermc.module-plugin")
-}
+
 
 group = "btc.renaud"
 version = "0.0.1"
@@ -29,7 +33,7 @@ typewriter {
             - Discord Link: Sync ranks and verify accounts.
             - Bug Reports: Customizable reporting menus with Dialog integration.
         """.trimIndent()
-        engineVersion = file("../../version.txt").readText().trim()
+        engineVersion = "0.9.0-beta-171"
         channel = com.typewritermc.moduleplugin.ReleaseChannel.BETA
 
         dependencies {
@@ -41,3 +45,4 @@ typewriter {
 kotlin {
     jvmToolchain(21)
 }
+

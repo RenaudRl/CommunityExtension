@@ -1,48 +1,40 @@
-﻿plugins {
-    kotlin("jvm") version "2.2.10"
+plugins {
+    kotlin("jvm") version "2.3.20"
     id("com.typewritermc.module-plugin") version "2.1.0"
 }
+group = "btcrenaud"
+version = "0.0.7"
 
 repositories {
+    mavenLocal()
     mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
-    flatDir {
-        dir("libs")
-    }
+    maven("https://jitpack.io")
 }
 
 dependencies {
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+
+    implementation("com.typewritermc:BasicExtension:0.9.0")
+    compileOnly("net.dv8tion:JDA:5.0.0-beta.24")
     testImplementation(kotlin("test"))
-    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("net.dv8tion:JDA:5.0.0-beta.24") // Use a recent version
 }
 
-
-
-group = "btc.renaud"
-version = "0.0.1"
-
 typewriter {
-    namespace = "renaud"
-
+    namespace = "btcrenaud"
     extension {
         name = "Community"
-        shortDescription = "Unified community tools: Discord Link & Bug Reports"
-        description = """
-            CommunityExtension centralizes player engagement tools:
-            - Discord Link: Sync ranks and verify accounts.
-            - Bug Reports: Customizable reporting menus with Dialog integration.
-        """.trimIndent()
-        engineVersion = "0.9.0-beta-171"
+        shortDescription = "Community system for TypeWriter"
+        description = "Community extension providing community management features for TypeWriter, including team building and community engagement tools."
+        engineVersion = "0.9.0-beta-174"
         channel = com.typewritermc.moduleplugin.ReleaseChannel.BETA
-
-        dependencies {
-            paper()
-        }
+        paper()
+        dependencies {}
     }
 }
 
-kotlin {
-    jvmToolchain(21)
-}
+    
 
+kotlin {
+    jvmToolchain(25)
+    
+}

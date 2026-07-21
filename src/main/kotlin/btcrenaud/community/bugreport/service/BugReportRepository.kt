@@ -3,59 +3,38 @@ package btcrenaud.community.bugreport.service
 import btcrenaud.community.bugreport.data.BugReport
 import btcrenaud.community.bugreport.entries.BugReportSequenceArtifactEntry
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.typewritermc.core.utils.UntickedAsync
+import com.typewritermc.core.utils.launch
 import com.typewritermc.engine.paper.entry.entries.stringData
 import com.typewritermc.engine.paper.logger
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Manages persistence of bug reports via JSON artifact storage.
- * Reports now survive server restarts (previously memory-only).
+ * Persists bug reports as a single JSON blob inside the manifest's artifact.
+ * Writes happen off-thread; the in-memory cache is the source of truth for reads.
  */
 class BugReportRepository(private val sequenceEntry: BugReportSequenceArtifactEntry?) {
 
     private val cache = ConcurrentHashMap<String, BugReport>()
     private val sequence = AtomicLong(0)
     private val gson = Gson()
+    private val persistMutex = Mutex()
 
-    init {
-        loadAll()
-    }
-
-    fun save(report: BugReport) {
-        cache[report.id] = report
-        persistAll()
-    }
-
-    fun findById(id: String): BugReport? = cache[id]
-
-    fun findAll(): List<BugReport> = cache.values.toList()
-
-    fun clear() {
-        cache.clear()
-        persistAll()
-    }
-
-    fun nextId(): String {
-        val next = sequence.incrementAndGet()
-        persistAll()
-        return next.toString()
-    }
-
-    // -- Persistence: wraps sequence + reports in a single JSON blob --
-
-    private fun loadAll() {
+    suspend fun load() {
         val entry = sequenceEntry ?: return
         runCatching {
-            val raw: String? = runBlocking { entry.stringData() }
+            val raw: String? = entry.stringData()
             if (!raw.isNullOrBlank() && raw.startsWith("{")) {
                 val obj = gson.fromJson(raw, StorageData::class.java)
                 sequence.set(obj.sequence)
                 obj.reports.forEach { cache[it.id] = it }
             } else {
-                // Legacy: just a sequence number
+                // Legacy format: the artifact only held the sequence number.
                 raw?.toLongOrNull()?.let { sequence.set(it) }
             }
         }.onFailure { e ->
@@ -63,18 +42,46 @@ class BugReportRepository(private val sequenceEntry: BugReportSequenceArtifactEn
         }
     }
 
-    private fun persistAll() {
+    fun save(report: BugReport) {
+        cache[report.id] = report
+        persistAsync()
+    }
+
+    fun delete(id: String): Boolean {
+        val removed = cache.remove(id) != null
+        if (removed) persistAsync()
+        return removed
+    }
+
+    fun findById(id: String): BugReport? = cache[id]
+
+    fun findAll(): List<BugReport> = cache.values.toList()
+
+    fun findByPlayer(playerUuid: UUID): List<BugReport> =
+        cache.values.filter { it.playerUuid == playerUuid }
+
+    fun countForPlayer(playerUuid: UUID): Int =
+        cache.values.count { it.playerUuid == playerUuid }
+
+    fun lastSubmissionOf(playerUuid: UUID): Long? =
+        cache.values.filter { it.playerUuid == playerUuid }.maxOfOrNull { it.createdAt }
+
+    fun nextId(): String = sequence.incrementAndGet().toString()
+
+    private fun persistAsync() {
         val entry = sequenceEntry ?: return
-        runCatching {
-            val data = StorageData(sequence.get(), cache.values.toList())
-            val json: String = gson.toJson(data)
-            runBlocking { entry.stringData(json) }
-        }.onFailure { e ->
-            logger.warning("Failed to persist bug reports: ${e.message}")
+        Dispatchers.UntickedAsync.launch {
+            persistMutex.withLock {
+                runCatching {
+                    val data = StorageData(sequence.get(), cache.values.toList())
+                    entry.stringData(gson.toJson(data))
+                }.onFailure { e ->
+                    logger.warning("Failed to persist bug reports: ${e.message}")
+                }
+            }
         }
     }
 
-    @Suppress("unused")
     private data class StorageData(
         val sequence: Long,
         val reports: List<BugReport>,

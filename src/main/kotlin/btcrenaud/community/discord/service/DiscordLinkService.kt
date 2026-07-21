@@ -1,19 +1,25 @@
 package btcrenaud.community.discord.service
 
-import btcrenaud.community.discord.data.DiscordLinkMessages
 import btcrenaud.community.discord.data.LinkRecord
 import btcrenaud.community.discord.data.PendingLink
-import btcrenaud.community.discord.entries.DiscordLinkManifestEntry
 import btcrenaud.community.discord.data.asReadable
+import btcrenaud.community.discord.data.remainingDuration
+import btcrenaud.community.discord.entries.DiscordLinkManifestEntry
 import btcrenaud.community.webhook.WebhookEmbed
 import btcrenaud.community.webhook.WebhookEmbedField
 import btcrenaud.community.webhook.WebhookSender
+import com.typewritermc.core.interaction.context
+import com.typewritermc.engine.paper.entry.triggerEntriesFor
 import com.typewritermc.engine.paper.logger
+import com.typewritermc.engine.paper.utils.asMini
+import com.typewritermc.engine.paper.utils.server
+import net.dv8tion.jda.api.entities.Role
 import org.bukkit.entity.Player
-import java.time.Duration
+import java.security.SecureRandom
 import java.time.Instant
 import java.util.UUID
-import kotlin.random.Random
+
+private const val CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 class DiscordLinkService(
     private val repository: DiscordLinkRepository,
@@ -21,18 +27,33 @@ class DiscordLinkService(
     private val discordClient: DiscordClientService,
     private val webhookSender: WebhookSender,
 ) {
+    private val random = SecureRandom()
 
-    fun generateCode(player: Player): String {
-        val now = System.currentTimeMillis()
-        repository.cleanupExpired(now)
-        val existing = repository.findPendingByPlayer(player.uniqueId)
-        if (existing != null && existing.expiresAt > System.currentTimeMillis()) {
-            return existing.code
+    // -- Player facing commands ---------------------------------------------
+
+    /** Handles `/{command}`: generates (or repeats) a verification code. */
+    fun requestCode(player: Player) {
+        val messages = manifest.messages
+        if (repository.findLink(player.uniqueId) != null && !manifest.autoOverwriteExistingLink) {
+            player.sendMessage(messages.alreadyLinked.asMini())
+            return
         }
 
-        // If limit reached and nothing active after cleanup, still generate a fresh code to avoid empty responses
+        val now = System.currentTimeMillis()
+        repository.cleanupExpired(now)
 
-        val code = generateRandomCode(manifest.codeLength)
+        val existing = repository.findPendingByPlayer(player.uniqueId)
+        if (existing != null && existing.expiresAt > now) {
+            player.sendMessage(
+                messages.pendingExists
+                    .replace("{code}", existing.code)
+                    .replace("{duration}", existing.remainingDuration().asReadable())
+                    .asMini()
+            )
+            return
+        }
+
+        val code = generateRandomCode(manifest.codeLength.coerceAtLeast(1))
         val pending = PendingLink(
             code = code,
             playerUuid = player.uniqueId,
@@ -42,8 +63,27 @@ class DiscordLinkService(
         )
         repository.savePending(pending)
 
-        return code
+        val duration = manifest.codeValidity.asReadable()
+        player.sendMessage(
+            messages.codeGenerated
+                .replace("{code}", code)
+                .replace("{duration}", duration)
+                .asMini()
+        )
+        sendWebhookInstruction(code, player.name)
     }
+
+    /** Handles `/{command} unlink`. */
+    fun requestUnlink(player: Player) {
+        val messages = manifest.messages
+        if (unlinkPlayer(player)) {
+            player.sendMessage(messages.unlinkSuccess.asMini())
+        } else {
+            player.sendMessage(messages.unlinkNoLink.asMini())
+        }
+    }
+
+    // -- Verification (called from the Discord bot listener) ----------------
 
     fun verifyCode(code: String, discordId: String, discordUsername: String): Boolean {
         val pending = repository.findPending(code) ?: return false
@@ -77,29 +117,32 @@ class DiscordLinkService(
         repository.saveLink(link)
         repository.removePending(code)
 
-        notifyWebhookLinked(link, manifest.messages)
+        val confirmation = manifest.messages.linkConfirmed
+            .replace("{discord}", link.discordUsername)
+            .replace("{player}", link.playerName)
+        notifyWebhook(manifest.messages.embedLinkedTitle, confirmation, link, Instant.ofEpochMilli(link.linkedAt))
+        notifyStaff(confirmation)
 
-        // Try immediate role sync if the player is online
-        val onlinePlayer = org.bukkit.Bukkit.getPlayer(pending.playerUuid)
-        if (onlinePlayer != null && onlinePlayer.isOnline) {
-            syncRoles(onlinePlayer)
+        // Sync roles and fire the configured link triggers when the player is online.
+        server.getPlayer(pending.playerUuid)?.let { player ->
+            syncRoles(player)
+            if (manifest.onLinkTriggers.isNotEmpty()) {
+                manifest.onLinkTriggers.triggerEntriesFor(player, context())
+            }
         }
 
         return true
     }
 
-    fun unlink(playerUuid: UUID) {
-        repository.removeLink(playerUuid)
-    }
+    fun isLinked(playerUuid: UUID): Boolean = repository.findLink(playerUuid) != null
 
     /**
      * Unlinks a player from Discord, removing their mapped roles and deleting the link record.
      * @return true if successfully unlinked, false if no link existed
      */
-    fun unlinkPlayer(player: org.bukkit.entity.Player): Boolean {
+    fun unlinkPlayer(player: Player): Boolean {
         val link = repository.findLink(player.uniqueId) ?: return false
-        
-        // Remove all mapped roles from Discord
+
         val guild = discordClient.getGuild()
         if (guild != null) {
             guild.retrieveMemberById(link.discordId).queue({ member ->
@@ -116,37 +159,16 @@ class DiscordLinkService(
                 logger.warning("Failed to retrieve Discord member for ${player.name} (${link.discordId}): ${error.message}")
             })
         }
-        
-        // Remove the link from storage
-        repository.removeLink(player.uniqueId)
-        
-        // Notify webhook
-        notifyWebhookUnlinked(link)
-        
-        return true
-    }
 
-    private fun notifyWebhookUnlinked(link: LinkRecord) {
-        val settings = manifest.webhook
-        if (!settings.enabled || settings.url.isBlank()) return
+        repository.removeLink(player.uniqueId)
 
         val content = manifest.messages.linkRevoked
             .replace("{discord}", link.discordUsername)
             .replace("{player}", link.playerName)
+        notifyWebhook(manifest.messages.embedUnlinkedTitle, content, link, Instant.now())
 
-        val embed = WebhookEmbed(
-            title = "Discord account unlinked",
-            description = content,
-            fields = listOf(
-                WebhookEmbedField("Player", link.playerName, true),
-                WebhookEmbedField("Discord", link.discordUsername, true),
-                WebhookEmbedField("Unlinked at", Instant.now().toString(), false),
-            ),
-        )
-        webhookSender.send(settings, content, listOf(embed))
+        return true
     }
-
-    fun isLinked(playerUuid: UUID): Boolean = repository.findLink(playerUuid) != null
 
     fun syncRoles(player: Player) {
         val link = repository.findLink(player.uniqueId) ?: return
@@ -158,10 +180,12 @@ class DiscordLinkService(
 
         guild.retrieveMemberById(link.discordId).queue({ member ->
             val mappings = manifest.roleMappings
-            val selectedMapping = mappings.firstOrNull { player.hasPermission("group.${it.minecraftGroup}") }
+            val selectedMapping = mappings.firstOrNull {
+                player.hasPermission(manifest.groupPermissionFormat.replace("{group}", it.minecraftGroup))
+            }
 
-            val rolesToAdd = mutableListOf<net.dv8tion.jda.api.entities.Role>()
-            val rolesToRemove = mutableListOf<net.dv8tion.jda.api.entities.Role>()
+            val rolesToAdd = mutableListOf<Role>()
+            val rolesToRemove = mutableListOf<Role>()
 
             val mappedRoles = mappings.mapNotNull { guild.getRoleById(it.discordRoleId) }
             val targetRole = selectedMapping?.let { guild.getRoleById(it.discordRoleId) }
@@ -184,43 +208,48 @@ class DiscordLinkService(
         })
     }
 
-    private fun sendWebhookInstruction(code: String, playerName: String, messages: DiscordLinkMessages) {
+    // -- Internals -----------------------------------------------------------
+
+    private fun sendWebhookInstruction(code: String, playerName: String) {
         val settings = manifest.webhook
         if (!settings.enabled || settings.url.isBlank()) return
 
-        val duration = manifest.codeValidity.asReadable()
-        val content = messages.linkInstructions
+        val content = manifest.messages.linkInstructions
             .replace("{code}", code)
-            .replace("{duration}", duration)
+            .replace("{duration}", manifest.codeValidity.asReadable())
             .replace("{player}", playerName)
 
         webhookSender.send(settings, content)
     }
 
-    private fun notifyWebhookLinked(link: LinkRecord, messages: DiscordLinkMessages) {
+    private fun notifyWebhook(title: String, content: String, link: LinkRecord, timestamp: Instant) {
         val settings = manifest.webhook
         if (!settings.enabled || settings.url.isBlank()) return
 
-        val content = messages.linkConfirmed
-            .replace("{discord}", link.discordUsername)
-            .replace("{player}", link.playerName)
-
         val embed = WebhookEmbed(
-            title = "Discord account linked",
+            title = title,
             description = content,
             fields = listOf(
                 WebhookEmbedField("Player", link.playerName, true),
                 WebhookEmbedField("Discord", link.discordUsername, true),
-                WebhookEmbedField("Linked at", Instant.ofEpochMilli(link.linkedAt).toString(), false),
+                WebhookEmbedField("At", timestamp.toString(), false),
             ),
         )
         webhookSender.send(settings, content, listOf(embed))
     }
 
-    private fun generateRandomCode(length: Int = 6): String {
-        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        return (1..length)
-            .map { chars[Random.nextInt(chars.length)] }
-            .joinToString("")
+    private fun notifyStaff(message: String) {
+        val permission = manifest.notifyPermission
+        if (permission.isBlank()) return
+        server.onlinePlayers
+            .filter { it.hasPermission(permission) }
+            .forEach { it.sendMessage(message.asMini()) }
+    }
+
+    private fun generateRandomCode(length: Int): String {
+        repository.countCodeGenerated()
+        return buildString(length) {
+            repeat(length) { append(CODE_CHARS[random.nextInt(CODE_CHARS.length)]) }
+        }
     }
 }

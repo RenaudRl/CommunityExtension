@@ -44,11 +44,19 @@ class WebhookSender(
             .POST(HttpRequest.BodyPublishers.ofString(payload))
             .build()
 
-        runCatching {
-            httpClient.send(request, HttpResponse.BodyHandlers.discarding())
-        }.onFailure { error ->
-            logger.warning("Failed to deliver webhook (${settings.url.takeLast(6)}): ${error.message}")
-        }
+        // Asynchronous delivery: webhooks are fired from event listeners and
+        // dialog callbacks, which must never wait on network I/O.
+        httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .whenComplete { response, error ->
+                when {
+                    error != null ->
+                        logger.warning("Failed to deliver webhook (${settings.url.takeLast(6)}): ${error.message}")
+                    response.statusCode() !in 200..299 ->
+                        logger.warning(
+                            "Webhook (${settings.url.takeLast(6)}) rejected with HTTP ${response.statusCode()}: ${response.body().take(200)}"
+                        )
+                }
+            }
     }
 
     private fun buildPayload(

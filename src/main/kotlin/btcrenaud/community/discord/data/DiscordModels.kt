@@ -2,8 +2,6 @@ package btcrenaud.community.discord.data
 
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 
@@ -28,7 +26,6 @@ data class RoleMapping(
     val discordRoleId: String = "000000000000000000",
 )
 
-
 /**
  * Represents a pending verification code waiting for confirmation.
  */
@@ -47,15 +44,14 @@ data class DiscordLinkMessages(
     val alreadyLinked: String = "You have already linked your Discord account.",
     val linkInstructions: String = "Use the code **{code}** within {duration} on Discord to complete the link.",
     val codeGenerated: String = "A new Discord verification code has been generated: {code} (expires in {duration}).",
-    val codeInvalid: String = "The provided verification code is invalid or expired.",
+    val pendingExists: String = "You already have a pending code: {code} (expires in {duration}).",
     val linkConfirmed: String = "Discord account {discord} is now linked to {player}.",
     val linkRevoked: String = "The link with {discord} has been revoked.",
-    val noLinkFound: String = "No Discord account is linked to this player.",
-    val pendingExists: String = "You already have a pending code: {code} (expires in {duration}).",
-    val menuPendingCode: String = "Pending Discord verification code: {code} (expires in {duration}).",
-    val menuNoPendingCode: String = "You do not have a pending Discord verification code.",
     val unlinkSuccess: String = "Your Discord account has been unlinked successfully.",
     val unlinkNoLink: String = "You don't have a Discord account linked.",
+    val linkUnavailable: String = "Discord linking is not configured on this server.",
+    val embedLinkedTitle: String = "Discord account linked",
+    val embedUnlinkedTitle: String = "Discord account unlinked",
 )
 
 /**
@@ -67,15 +63,11 @@ data class DiscordLinkStorage(
     val pending: MutableList<PendingLink> = mutableListOf(),
 )
 
-private val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withLocale(Locale.US).withZone(ZoneId.systemDefault())
-
 internal fun PendingLink.remainingDuration(): Duration {
     val now = Instant.now()
     val expiry = Instant.ofEpochMilli(expiresAt)
     return if (expiry.isAfter(now)) Duration.between(now, expiry) else Duration.ZERO
 }
-
-internal fun LinkRecord.linkedAtFormatted(): String = formatter.format(Instant.ofEpochMilli(linkedAt))
 
 internal fun Duration.asReadable(): String {
     val seconds = coerceAtLeast(Duration.ZERO).seconds

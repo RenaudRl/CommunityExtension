@@ -48,4 +48,8 @@ data class ChatChannelConfig(
     val enabled: Boolean = true,
     @Help("Permission required to send messages to this channel (empty = no permission required)")
     val permission: String = "",
+    @Help("Relay Discord messages from these channel IDs back into Minecraft chat")
+    val discordToMinecraft: Boolean = false,
+    @Help("In-game format for relayed Discord messages. Placeholders: {author}, {message}")
+    val minecraftFormat: String = "<blue>[Discord]</blue> <gray>{author}:</gray> {message}",
 )

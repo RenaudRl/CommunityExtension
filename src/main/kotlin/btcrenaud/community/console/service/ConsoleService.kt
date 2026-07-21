@@ -2,6 +2,7 @@ package btcrenaud.community.console.service
 
 import btcrenaud.community.console.entries.ConsoleChannelEntry
 import com.typewritermc.engine.paper.logger
+import com.typewritermc.engine.paper.plugin
 import net.dv8tion.jda.api.entities.emoji.Emoji
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
@@ -77,10 +78,8 @@ class ConsoleService(
         // Log command execution
         logCommand(event.author.name, event.author.id, command)
 
-        // Execute command on main thread
-        Bukkit.getScheduler().runTask(
-            org.bukkit.plugin.java.JavaPlugin.getProvidingPlugin(ConsoleService::class.java)
-        ) { _ ->
+        // Dispatch on the global region thread; works on both Paper and Folia.
+        Bukkit.getGlobalRegionScheduler().run(plugin) { _ ->
             try {
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command)
                 event.message.addReaction(Emoji.fromUnicode("✅")).queue()

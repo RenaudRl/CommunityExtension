@@ -18,8 +18,8 @@ data class DiscordBotSettings(
 data class DiscordBotVerificationMessages(
     @Placeholder @MultiLine
     @Help("Reply posted when a code is accepted (placeholders: {player}, {code})")
-    val success: String = "Code validé pour {player}.",
+    val success: String = "Code accepted for {player}.",
     @Placeholder @MultiLine
     @Help("Reply posted when a code is rejected/invalid (placeholders: {player}, {code})")
-    val failure: String = "Code invalide pour {player}.",
+    val failure: String = "Invalid code for {player}.",
 )

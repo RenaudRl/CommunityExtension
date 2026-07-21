@@ -3,7 +3,7 @@ plugins {
     id("com.typewritermc.module-plugin") version "2.1.0"
 }
 group = "btcrenaud"
-version = "0.0.7"
+version = "0.0.8"
 
 repositories {
     mavenLocal()
@@ -15,7 +15,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
 
     implementation("com.typewritermc:BasicExtension:0.9.0")
-    compileOnly("net.dv8tion:JDA:5.0.0-beta.24")
+    implementation("net.dv8tion:JDA:6.5.0")
     testImplementation(kotlin("test"))
 }
 
@@ -25,7 +25,7 @@ typewriter {
         name = "Community"
         shortDescription = "Community system for TypeWriter"
         description = "Community extension providing community management features for TypeWriter, including team building and community engagement tools."
-        engineVersion = "0.9.0-beta-174"
+        engineVersion = "0.9.0-beta-175"
         channel = com.typewritermc.moduleplugin.ReleaseChannel.BETA
         paper()
         dependencies {}
@@ -35,6 +35,6 @@ typewriter {
     
 
 kotlin {
-    jvmToolchain(25)
-    
+    jvmToolchain(21)
 }
+

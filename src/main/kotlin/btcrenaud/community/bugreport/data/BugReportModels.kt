@@ -105,13 +105,22 @@ data class BugReportMessages(
     val staffNotification: String = "{player} submitted bug report #{id} ({status}).",
     val reportNotFound: String = "Unable to find bug report #{id}.",
     val statusUpdated: String = "Report #{id} is now {status}.",
+    val unknownStatus: String = "Unknown status '{status}'. Available statuses: {statuses}.",
     val reportDeleted: String = "Report #{id} has been deleted.",
     val noReportsFound: String = "There are no bug reports matching your filters.",
+    val noCategoriesAvailable: String = "No categories available for bug reports.",
     val listHeader: String = "Recent bug reports:",
     val listEntry: String = "#{id} - {title} [{status}] by {player} in {world}",
 )
 
 internal val defaultCategories = emptyList<BugReportCategory>()
+
+internal val defaultStatuses = listOf(
+    BugReportStatus(id = "open", displayName = "Open", description = "Newly submitted report", sendNotification = false),
+    BugReportStatus(id = "in_progress", displayName = "In Progress", description = "A staff member is looking into it", sendNotification = true),
+    BugReportStatus(id = "resolved", displayName = "Resolved", description = "The issue has been fixed", sendNotification = true),
+    BugReportStatus(id = "closed", displayName = "Closed", description = "Report closed without a fix", sendNotification = true),
+)
 
 private val formatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withLocale(Locale.US).withZone(ZoneId.systemDefault())
 

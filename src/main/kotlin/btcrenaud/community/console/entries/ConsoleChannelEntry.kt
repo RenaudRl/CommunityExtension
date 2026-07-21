@@ -10,7 +10,7 @@ import com.typewritermc.engine.paper.entry.ManifestEntry
  * Manifest entry for console command execution from Discord.
  * Allows executing server commands from a Discord channel.
  */
-@Entry("console_channel_manifest", "Configure Discord console channel", Colors.GRAY, "mdi:console")
+@Entry("console_channel_manifest", "Configure Discord console channel", Colors.MEDIUM_PURPLE, "mdi:console")
 @Tags("console", "discord", "commands")
 class ConsoleChannelEntry(
     override val id: String = "",

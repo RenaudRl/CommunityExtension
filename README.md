@@ -1,60 +1,69 @@
-# Community Extension
+# Discord Extension
 
 ![Java Version](https://img.shields.io/badge/Java-21-orange)
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Target](https://img.shields.io/badge/Target-Paper%20/%20Folia%20/%20BTC--CORE-blue)
+![Target](https://img.shields.io/badge/Target-Paper%20%2F%20Folia-blue)
 
-**Community Extension** is a unified community tool suite for **TypeWriter**, engineered for **BTC Studio** infrastructure. It centralizes player engagement tools including Discord synchronization and bug reporting.
+Everything that crosses between your server and Discord, on one reusable destination.
 
----
-
-## 🚀 Key Features
-
-### 🎮 Discord Integration
-- **Account Linking**: Sync ranks and verify accounts between Minecraft and Discord.
-- **Role Sync**: Automatically update Discord roles based on in-game status.
-
-### 🐛 Bug Reporting
-- **In-Game Reporting**: Customizable reporting menus with Dialog integration.
-- **Webhook Integration**: Send bug reports directly to Discord channels.
-
-### 💬 Chat & Console
-- **Chat Sync**: Synchronize in-game chat with Discord channels.
-- **Console Channel**: Stream console logs to private Discord channels for monitoring.
+> Formerly published as **Community Extension**. The extension, package and directory were renamed
+> in v0.9; entry names are unchanged, and pages written before that version are migrated on first
+> start.
 
 ---
 
-## ⚙️ Configuration
+## Features
 
-Community Extension configuration is managed via TypeWriter's manifest system.
+### Webhook destinations
 
-## 🛠 Building & Deployment
+`webhook_definition` declares a Discord destination once — URL, username, avatar, permanent role
+mentions — and every feature references it. Changing channel is a single edit instead of one per
+manifest.
 
-Requires **Java 21**.
+`WebhookService` is a Koin singleton, so any extension can deliver a message to a destination
+without owning an HTTP client.
 
-```bash
-# Clone the repository
-git clone https://github.com/RenaudRl/CommunityExtension.git
-cd CommunityExtension
+### Account link
 
-# Build the project
-./gradlew clean build
-```
+Verify accounts and synchronise ranks between Minecraft and Discord.
 
-### Artifact Locations:
-- `build/libs/CommunityExtension-[Version].jar`
+### Chat sync
+
+Relay in-game chat to a Discord channel, and back.
+
+### Console channel
+
+Stream console output to a private channel.
+
+### Bug reports
+
+In-game reporting menus that post to Discord as embeds or forum threads. An empty destination is
+the disabled state — there is no second on/off switch to contradict it.
+
+### Shop announcements
+
+`shop_notification_manifest` describes how a shop transaction reads once it reaches Discord. The
+destination is deliberately not part of it: it belongs to the shop, which names it on its own
+definition, so one presentation serves every shop while each posts to its own channel.
+
+Requires the Shops extension for this feature, but does not depend on it: Shops publishes an event
+and knows nothing about Discord, and the listener is registered only when that event class is
+present on the server.
 
 ---
 
-## 🤝 Credits & Inspiration
-- **[TypeWriter](https://github.com/gabber235/Typewriter)** - The engine this extension is built for.
-- **[BTC Studio](https://github.com/RenaudRl)** - Maintenance and specialized optimizations.
+## Migration from Community
+
+Pages written before v0.9 carry their webhook as an inline object. On first start they are
+converted: one `webhook_definition` per distinct destination — manifests configured identically
+share a single entry — and the manifests repointed at it.
+
+Every rewritten page is backed up first, under `backup/community-webhook-v1/`. The conversion is
+driven by the shape of the data rather than a version number, so running it twice changes nothing.
+A manifest that was switched off keeps its URL on a disabled destination rather than losing it.
 
 ---
 
-## 📜 License
-Licensed under the **MIT License**.
+## Configuration
 
-## Documentation
-
-Full documentation available at [BTC Studio Docs](https://docs.borntocraftstudio.net/extensions/free/community/).
+Configured through Typewriter's manifest system, in the web editor.
+Full documentation available at [BTC Studio Docs](https://docs.borntocraftstudio.net/extensions/free/discord/).

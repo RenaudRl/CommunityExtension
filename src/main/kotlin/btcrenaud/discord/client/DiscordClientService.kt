@@ -23,6 +23,11 @@ class DiscordClientService {
             return
         }
 
+        if (!isJdaRuntimeAvailable()) {
+            logger.warning("Discord Bot is enabled but the JDA runtime is missing or incomplete; Discord link is disabled.")
+            return
+        }
+
         try {
             jda = JDABuilder.createDefault(settings.botToken)
                 .enableIntents(
@@ -79,7 +84,23 @@ class DiscordClientService {
             )
     }
 
-    fun isReady(): Boolean = jda?.status == JDA.Status.CONNECTED
+    fun isReady(): Boolean {
+        val currentJda = jda ?: return false
+        return currentJda.status == JDA.Status.CONNECTED
+    }
+
+    private fun isJdaRuntimeAvailable(): Boolean {
+        val classLoader = DiscordClientService::class.java.classLoader
+        return try {
+            Class.forName("net.dv8tion.jda.api.JDABuilder", false, classLoader)
+            Class.forName("net.dv8tion.jda.api.JDA\$Status", false, classLoader)
+            true
+        } catch (_: ClassNotFoundException) {
+            false
+        } catch (_: LinkageError) {
+            false
+        }
+    }
 
     fun addEventListener(listener: Any) {
         jda?.addEventListener(listener)

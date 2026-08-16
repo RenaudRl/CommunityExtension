@@ -16,6 +16,7 @@ import btcrenaud.discord.link.service.DiscordLinkRepository
 import btcrenaud.discord.link.service.DiscordLinkService
 import btcrenaud.discord.shop.ShopNotificationListener
 import btcrenaud.discord.webhook.WebhookService
+import btcrenaud.discord.webhook.fact.FactWebhookWatcher
 import btcrenaud.discord.webhook.migration.WebhookPageMigrator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -29,10 +30,13 @@ import com.typewritermc.engine.paper.utils.asMini
 import com.typewritermc.engine.paper.utils.server
 import lirand.api.extensions.server.registerEvents
 import net.dv8tion.jda.api.entities.emoji.Emoji
+import org.bukkit.event.Event
 import org.bukkit.event.EventHandler
 import org.bukkit.event.HandlerList
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
+import org.bukkit.event.EventPriority
+import org.bukkit.plugin.EventExecutor
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.ConcurrentHashMap
 
@@ -64,6 +68,7 @@ object DiscordExtension : Initializable, Listener {
     // load a class compiled against Shops, which is optional.
     @Volatile
     private var shopNotificationListener: Listener? = null
+    private var factWebhookWatcher: FactWebhookWatcher? = null
 
     /** Service bound to the bug report manifest with the given entry id, if initialized. */
     fun bugReportSystem(manifestId: String): BugReportService? = bugReportServices[manifestId]
@@ -83,6 +88,7 @@ object DiscordExtension : Initializable, Listener {
         initializeConsoleChannels()
         initializeDiscordBridges()
         initializeShopNotifications()
+        initializeFactWebhooks()
 
         plugin.registerEvents(this)
         logger.info("DiscordExtension initialized")
@@ -96,19 +102,28 @@ object DiscordExtension : Initializable, Listener {
      * throw as this one starts.
      */
     private fun initializeShopNotifications() {
-        val available = runCatching {
+        val eventClass = runCatching {
             Class.forName(
                 "com.btc.shops.api.ShopTransactionEvent",
                 false,
                 DiscordExtension::class.java.classLoader,
-            )
-        }.isSuccess
-        if (!available) return
+            ).asSubclass(Event::class.java)
+        }.getOrNull() ?: return
 
         val listener = ShopNotificationListener(webhookService)
         shopNotificationListener = listener
-        plugin.registerEvents(listener)
+        plugin.server.pluginManager.registerEvent(
+            eventClass,
+            listener,
+            EventPriority.MONITOR,
+            EventExecutor { _, event -> listener.onTransaction(event) },
+            plugin,
+        )
         logger.info("Shop transactions will be announced on the destinations the shops name")
+    }
+
+    private fun initializeFactWebhooks() {
+        factWebhookWatcher = FactWebhookWatcher(webhookService).also { it.initialize() }
     }
 
     /**
@@ -135,6 +150,10 @@ object DiscordExtension : Initializable, Listener {
      * relay and bug report slash commands.
      */
     private fun initializeDiscordBridges() {
+        // The Discord bot is configured only by discord_link_manifest. Without that optional
+        // manifest there is no JDA session to bridge, and no JDA runtime class should be
+        // resolved merely because the extension is installed.
+        if (discordLinkService == null) return
         if (!discordClientService.isReady()) return
 
         // Discord -> Minecraft chat relay.
@@ -286,6 +305,9 @@ object DiscordExtension : Initializable, Listener {
 
         shopNotificationListener?.let { HandlerList.unregisterAll(it) }
         shopNotificationListener = null
+
+        factWebhookWatcher?.shutdown()
+        factWebhookWatcher = null
 
         discordClientService.disconnect()
         discordLinkService = null

@@ -49,6 +49,19 @@ Requires the Shops extension for this feature, but does not depend on it: Shops 
 and knows nothing about Discord, and the listener is registered only when that event class is
 present on the server.
 
+### Fact webhooks
+
+`webhook_fact_event` publishes a message whenever a Typewriter fact changes. The event can run once
+per player, once per Typewriter group, or once globally, and can optionally be restricted to a
+Typewriter audience. Message content, embeds, fields, forum thread names and role mentions are
+configurable with `{player}`, `{fact}`, `{previous_value}`, `{new_value}`, `{change}`, `{group}` and
+`{players}` placeholders.
+
+The event uses Typewriter's fact tracker, so grouped facts and custom fact implementations are read
+through the same engine path as the rest of the server. A Discord webhook can publish messages but
+cannot invoke a slash command; command automation should be handled by a Discord bot consuming the
+published message.
+
 ---
 
 ## Migration from Community

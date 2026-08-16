@@ -6,4 +6,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "CommunityExtension"
+rootProject.name = "TypeWriter-DiscordExtension"

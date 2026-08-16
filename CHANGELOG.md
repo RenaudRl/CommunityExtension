@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10 — 2026-08-16
+
+### Fact webhooks
+
+- Added `webhook_fact_event`, a configurable fact-change event that publishes to any reusable
+  `webhook_definition` destination.
+- Supports player, Typewriter group and global scopes, optional Typewriter audiences, value
+  conditions, message/embed templates, forum threads and role mentions.
+- Group and global scopes deduplicate callbacks from players observing the same grouped fact.
+
+### Fixes
+
+- Discord link is fully optional: installing the extension without a `discord_link_manifest` no
+  longer attempts to initialize Discord bridges or resolve JDA classes.
+- The client reports a disabled Discord integration when JDA is unavailable or incomplete,
+  instead of propagating a `NoClassDefFoundError` into the server thread.
+- The public release artifact now bundles JDA 6.5.0 and its runtime dependencies, while keeping
+  Typewriter's `BasicExtension` provided by the engine.
+
 ## 0.9 — 2026-08-12
 
 ### Renamed

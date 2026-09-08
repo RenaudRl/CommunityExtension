@@ -1,10 +1,10 @@
-﻿plugins {
-    kotlin("jvm") version "2.3.20"
-    id("com.typewritermc.module-plugin") version "2.1.0"
+plugins {
+    kotlin("jvm") version "2.2.10"
+    id("com.typewritermc.module-plugin") version "2.2.0"
     id("com.gradleup.shadow") version "9.4.1"
 }
 group = "btcrenaud"
-version = "0.10"
+version = "0.12"
 
 repositories {
     mavenCentral()
@@ -27,7 +27,7 @@ typewriter {
         name = "Discord"
         shortDescription = "Discord bridge: webhooks, fact events, account link, chat sync, bug reports"
         description = "Everything that crosses between the server and Discord, on one reusable destination: declare a webhook once and reference it from anywhere, publish Typewriter fact changes by player, group or audience, verify accounts and synchronize ranks, relay chat and console both ways, and post bug reports as embeds or forum threads."
-        engineVersion = "0.9.0-beta-175"
+        engineVersion = "0.9.0-beta-177"
         channel = com.typewritermc.moduleplugin.ReleaseChannel.BETA
         paper()
         dependencies {}

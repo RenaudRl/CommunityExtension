@@ -9,3 +9,8 @@ build/
 out/
 _build.log
 _build_out.txt
+
+# Jars fournis a la main (moteur Typewriter, extensions tierces).
+# Le moteur Typewriter NE DOIT PAS etre redistribue : sa licence l'interdit
+# explicitement (Typewriter Software License Agreement, 3.1).
+libs/

@@ -42,6 +42,7 @@ class FactWebhookWatcher(
 
     private val subscriptions = ConcurrentHashMap<UUID, FactListenerSubscription>()
     private val lastValues = ConcurrentHashMap<String, Int>()
+    private val triggerThrottle = TriggerThrottle()
     private var entries: List<WebhookFactEventEntry> = emptyList()
     private var facts: List<Ref<ReadableFactEntry>> = emptyList()
     private var startupJob: Job? = null
@@ -80,11 +81,23 @@ class FactWebhookWatcher(
             .forEach { entry ->
                 val groupId = context.ref.get()?.identifier(player)?.groupId?.id.orEmpty()
                 if (!shouldPublish(entry, context, groupId)) return@forEach
-                publish(entry, context, groupId)
-                // The event has happened whether or not Discord accepts the message: the chained
-                // entries run for the player whose update was published, once per publication.
-                entry.triggers.triggerEntriesFor(player, interactionContext())
+                // Chained entries run only for a publication that was actually handed to Discord,
+                // for the player whose update was published. The throttle stops a chained action
+                // that rewrites the watched fact from re-firing the event in a loop.
+                if (publish(entry, context, groupId) && acquireTriggers(entry, player)) {
+                    entry.triggers.triggerEntriesFor(player, interactionContext())
+                }
             }
+    }
+
+    private fun acquireTriggers(entry: WebhookFactEventEntry, player: Player): Boolean {
+        if (entry.triggers.isEmpty()) return false
+        return triggerThrottle.tryAcquire(
+            entryId = entry.id,
+            playerId = player.uniqueId,
+            nowMillis = System.currentTimeMillis(),
+            cooldownMillis = entry.triggerCooldownSeconds * MILLIS_PER_SECOND,
+        )
     }
 
     private fun shouldPublish(
@@ -106,7 +119,8 @@ class FactWebhookWatcher(
         return previous == null || previous == context.oldValue
     }
 
-    private fun publish(entry: WebhookFactEventEntry, context: FactUpdateContext, groupId: String) {
+    /** Sends the webhook; false when the templates rendered nothing to send. */
+    private fun publish(entry: WebhookFactEventEntry, context: FactUpdateContext, groupId: String): Boolean {
         val fact = context.ref.get()
         val groupPlayers = if (groupId.isBlank()) {
             ""
@@ -140,7 +154,7 @@ class FactWebhookWatcher(
                 },
             )
         }
-        if (content.isBlank() && embed == null) return
+        if (content.isBlank() && embed == null) return false
 
         webhookService.send(
             destination = entry.destination,
@@ -149,6 +163,7 @@ class FactWebhookWatcher(
             threadName = entry.threadNameTemplate.fill(placeholders).takeIf { it.isNotBlank() },
             pingRoleIds = entry.pingRoleIds,
         )
+        return true
     }
 
     @EventHandler
@@ -159,6 +174,7 @@ class FactWebhookWatcher(
     @EventHandler
     fun onQuit(event: PlayerQuitEvent) {
         subscriptions.remove(event.player.uniqueId)?.cancel(event.player)
+        triggerThrottle.forget(event.player.uniqueId)
     }
 
     fun shutdown() {
@@ -170,6 +186,7 @@ class FactWebhookWatcher(
         }
         subscriptions.clear()
         lastValues.clear()
+        triggerThrottle.clear()
         entries = emptyList()
         facts = emptyList()
     }
@@ -178,4 +195,8 @@ class FactWebhookWatcher(
         "\\{([^}]+)}".toRegex().replace(this) { values[it.groupValues[1]] ?: "" }
 
     private fun String.toColorInt(): Int? = trim().removePrefix("#").toIntOrNull(16)
+
+    private companion object {
+        const val MILLIS_PER_SECOND = 1_000L
+    }
 }

@@ -6,6 +6,7 @@ import com.typewritermc.core.entries.Ref
 import com.typewritermc.core.entries.emptyRef
 import com.typewritermc.core.extension.annotations.Entry
 import com.typewritermc.core.extension.annotations.Help
+import com.typewritermc.core.extension.annotations.Min
 import com.typewritermc.core.extension.annotations.MultiLine
 import com.typewritermc.core.extension.annotations.Placeholder
 import com.typewritermc.core.extension.annotations.Tags
@@ -120,4 +121,7 @@ class WebhookFactEventEntry(
     @Help("Additional Discord role IDs to mention")
     val pingRoleIds: List<String> = emptyList(),
     override val triggers: List<Ref<TriggerableEntry>> = emptyList(),
+    @Min(0)
+    @Help("Loop guard for `triggers`: minimum seconds between two firings for the same player. A chained action that rewrites the watched fact would otherwise re-fire this event forever. 0 disables the guard")
+    val triggerCooldownSeconds: Int = 1,
 ) : EventEntry

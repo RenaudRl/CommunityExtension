@@ -5,6 +5,10 @@
 - `webhook_fact_event.triggers` is now fired: each time the event publishes its webhook, the chained
   entries run for the player whose fact update was published (once per publication, so a `GROUP` or
   `GLOBAL` scope fires them once, for the first observer). Until now the field was saved but never read.
+- They fire only after an effective publication: a webhook whose templates render nothing does not
+  trigger anything.
+- New `triggerCooldownSeconds` (default 1, `0` disables) on `webhook_fact_event`: loop guard per event
+  and player, so a chained action that rewrites the watched fact cannot re-fire the event endlessly.
 
 ## 0.10 — 2026-08-16
 

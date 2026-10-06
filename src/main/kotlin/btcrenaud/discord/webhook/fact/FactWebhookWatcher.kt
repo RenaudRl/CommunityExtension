@@ -7,6 +7,7 @@ import btcrenaud.discord.webhook.fact.entries.FactWebhookScope
 import btcrenaud.discord.webhook.fact.entries.WebhookFactEventEntry
 import com.typewritermc.core.entries.Query
 import com.typewritermc.core.entries.Ref
+import com.typewritermc.core.interaction.context as interactionContext
 import com.typewritermc.engine.paper.entry.entries.GroupId
 import com.typewritermc.engine.paper.entry.entries.ReadableFactEntry
 import com.typewritermc.engine.paper.facts.FactListenerSubscription
@@ -14,6 +15,7 @@ import com.typewritermc.engine.paper.facts.FactUpdateContext
 import com.typewritermc.engine.paper.facts.listenForFacts
 import com.typewritermc.engine.paper.facts.stopListening
 import com.typewritermc.engine.paper.entry.inAudience
+import com.typewritermc.engine.paper.entry.triggerEntriesFor
 import com.typewritermc.engine.paper.logger
 import com.typewritermc.engine.paper.plugin
 import com.typewritermc.engine.paper.utils.server
@@ -79,6 +81,9 @@ class FactWebhookWatcher(
                 val groupId = context.ref.get()?.identifier(player)?.groupId?.id.orEmpty()
                 if (!shouldPublish(entry, context, groupId)) return@forEach
                 publish(entry, context, groupId)
+                // The event has happened whether or not Discord accepts the message: the chained
+                // entries run for the player whose update was published, once per publication.
+                entry.triggers.triggerEntriesFor(player, interactionContext())
             }
     }
 

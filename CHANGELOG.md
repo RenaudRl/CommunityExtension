@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `webhook_fact_event.triggers` is now fired: each time the event publishes its webhook, the chained
+  entries run for the player whose fact update was published (once per publication, so a `GROUP` or
+  `GLOBAL` scope fires them once, for the first observer). Until now the field was saved but never read.
+
 ## 0.10 — 2026-08-16
 
 ### Fact webhooks

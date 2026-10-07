@@ -1,7 +1,8 @@
 # Discord Extension
 
 ![Java Version](https://img.shields.io/badge/Java-21-orange)
-![Target](https://img.shields.io/badge/Target-Paper%20%2F%20Folia-blue)
+![Target](https://img.shields.io/badge/Target-Paper-blue)
+![Typewriter](https://img.shields.io/badge/Typewriter-0.9.0--beta--177-purple)
 
 Everything that crosses between your server and Discord, on one reusable destination.
 
@@ -24,20 +25,24 @@ without owning an HTTP client.
 
 ### Account link
 
-Verify accounts and synchronise ranks between Minecraft and Discord.
+`discord_link_manifest` verifies accounts and synchronises ranks between Minecraft and Discord. The
+player command is `/tw discordlink` (name set by `commandName`) with `unlink`; `onLinkTriggers` run
+for the player when the link is confirmed. Link data lives in a `discord_link_storage` artifact.
 
 ### Chat sync
 
-Relay in-game chat to a Discord channel, and back.
+`chat_sync_manifest` relays in-game chat to a Discord channel, and back.
 
 ### Console channel
 
-Stream console output to a private channel.
+`console_channel_manifest` streams console output to a private channel.
 
 ### Bug reports
 
-In-game reporting menus that post to Discord as embeds or forum threads. An empty destination is
-the disabled state — there is no second on/off switch to contradict it.
+`bugreport_manifest`: in-game reporting menus that post to Discord as embeds or forum threads, with
+the command `/tw <commandName>` (`mine`, and for `adminPermission` holders `list`, `status`, `delete`)
+and Discord slash commands. Reports are numbered in a `bugreport_sequence_storage` artifact. An empty
+destination is the disabled state — there is no second on/off switch to contradict it.
 
 ### Shop announcements
 
@@ -56,6 +61,11 @@ per player, once per Typewriter group, or once globally, and can optionally be r
 Typewriter audience. Message content, embeds, fields, forum thread names and role mentions are
 configurable with `{player}`, `{fact}`, `{previous_value}`, `{new_value}`, `{change}`, `{group}` and
 `{players}` placeholders.
+
+The `triggers` of the event run after a webhook is published, for the player whose fact change was
+published. `triggerCooldownSeconds` (default 1) is a loop guard: the minimum number of seconds between
+two firings of `triggers` for the same player, so a chained action that rewrites the watched fact does
+not re-fire the event forever; 0 disables it.
 
 The event uses Typewriter's fact tracker, so grouped facts and custom fact implementations are read
 through the same engine path as the rest of the server. A Discord webhook can publish messages but
@@ -78,7 +88,19 @@ A manifest that was switched off keeps its URL on a disabled destination rather 
 
 ## Configuration
 
-Configured through Typewriter's manifest system, in the web editor.
+Configured through Typewriter's manifest system, in the web editor. Requires Typewriter
+`0.9.0-beta-177` on Paper and the Basic extension; the JDA library is bundled.
+
+| Entry | Id |
+|---|---|
+| Webhook destination | `webhook_definition` |
+| Webhook Fact Event | `webhook_fact_event` |
+| Account link / storage | `discord_link_manifest`, `discord_link_storage` |
+| Chat sync | `chat_sync_manifest` |
+| Console channel | `console_channel_manifest` |
+| Bug reports / sequence storage | `bugreport_manifest`, `bugreport_sequence_storage` |
+| Shop announcements | `shop_notification_manifest` |
+
 Full documentation available at [BTC Studio Docs](https://docs.borntocraftstudio.net/extensions/free/discord/).
 
 ---

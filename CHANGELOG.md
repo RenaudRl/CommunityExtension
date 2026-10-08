@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13 — 2026-10-08
 
 - `webhook_fact_event.triggers` is now fired: each time the event publishes its webhook, the chained
   entries run for the player whose fact update was published (once per publication, so a `GROUP` or
